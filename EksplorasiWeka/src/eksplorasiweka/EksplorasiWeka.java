@@ -5,12 +5,17 @@
  */
 package eksplorasiweka;
 
+import java.util.Enumeration;
 import java.util.Random;
 import java.util.Scanner;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 import weka.classifiers.Classifier;
 import weka.classifiers.Evaluation;
 import weka.classifiers.bayes.NaiveBayes;
 import weka.classifiers.trees.Id3;
+import weka.classifiers.trees.J48;
+import weka.core.Attribute;
 
 
 import weka.core.Instances;
@@ -18,6 +23,7 @@ import weka.core.SerializationHelper;
 import weka.core.Utils;
 import weka.core.converters.ConverterUtils;
 import weka.filters.Filter;
+import weka.filters.supervised.instance.Resample;
 import weka.filters.unsupervised.attribute.Remove;
 
 
@@ -37,7 +43,8 @@ public class EksplorasiWeka {
         try {
             data = ConverterUtils.DataSource.read(data_address);
             System.out.println("LOAD DATA BERHASIL\n\n");
-            System.out.println(data.toString() + "\n");   
+            System.out.println(data.toString() + "\n"); 
+            data.setClassIndex(data.numAttributes() - 1);
         } catch (Exception ex) {
             System.out.println("File gagal di-load");
         }     
@@ -57,11 +64,26 @@ public class EksplorasiWeka {
     }
     
     //Filter: Resample
-    public void resample(){
-        Random R = new Random();
-        data.resample(R);
-        System.out.println("HASIL RESAMPLE\n\n");
-        System.out.println(data.toString() + "\n");   
+    public void resample(double b, double z, int seed){
+        try {
+            System.out.println(data.toString() + "\n");
+            Resample resampleFilter = new Resample();
+            
+            resampleFilter.setInputFormat(data);
+            resampleFilter.setNoReplacement(false);
+            resampleFilter.setBiasToUniformClass(b); // Uniform distribution of class
+            resampleFilter.setSampleSizePercent(z);
+            resampleFilter.setRandomSeed(seed);
+            
+            data = Filter.useFilter(data,resampleFilter);
+            
+            /*Random R = new Random();
+            data.resample(R);*/
+            System.out.println("HASIL RESAMPLE\n\n");
+            System.out.println(data.toString() + "\n");
+        } catch (Exception ex) {
+            Logger.getLogger(EksplorasiWeka.class.getName()).log(Level.SEVERE, null, ex);
+        }
     }
     
     //Build Classifier: NaiveBayes
@@ -94,6 +116,21 @@ public class EksplorasiWeka {
         return model;
     }
     
+    //BuildClassifier: C4.5
+    public Classifier C45(){
+        Classifier model = null;
+        try {
+            data.setClassIndex(data.numAttributes()-1);
+            J48 tree = new J48();
+            tree.buildClassifier(data);
+            model = tree;
+            System.out.println(model.toString());
+        } catch (Exception ex) {
+            System.out.println("Tidak bisa berhasil membuat model id3");
+        }
+        return model;
+    }
+    
     //10-fold cross validation
     public void crossValidation(Classifier model){
         try {
@@ -111,24 +148,28 @@ public class EksplorasiWeka {
     //percentage split
     public void percentageSplit(Classifier model, double percent){
         try {
-            int trainSize = (int) Math.round(data.numInstances() * percent/100);
+            data.randomize(new java.util.Random(0));
+            int trainSize = (int) Math.round((double) data.numInstances() * percent/100f);
             int testSize = data.numInstances() - trainSize;
-            Instances train = new Instances(data, trainSize);
-            Instances test = new Instances(data, testSize);;
+            
+            Instances train = new Instances(data, 0, trainSize);
+            Instances test = new Instances(data, trainSize, testSize);
  
-            for(int i=0; i<trainSize; i++){
+            /*for(int i=0; i<trainSize; i++){
                 train.add(data.instance(i));
             }
             for(int i=trainSize; i<data.numInstances(); i++){
                 test.add(data.instance(i));
-            }
+            }*/
  
             Evaluation eval = new Evaluation(train);
             eval.evaluateModel(model, test);
             System.out.println("PERCENTAGE SPLIT\n\n");
-            System.out.println(eval.toSummaryString("\n=== Summary ===\n", false));
+            
             System.out.println(eval.toClassDetailsString("=== Detailed Accuracy By Class ===\n"));
             System.out.println(eval.toMatrixString("=== Confusion Matrix ===\n"));
+            System.out.println(eval.toSummaryString("\n=== Summary ===\n", false));
+            
         } catch (Exception ex) {
             System.out.println("Gagal");
         }
@@ -150,7 +191,7 @@ public class EksplorasiWeka {
         try {
             model  = (Classifier) SerializationHelper.read(modeladdress);
             System.out.println(model.toString());
-            System.out.println("berhasil diload\n");
+            System.out.println("Berhasil Load Model\n");
         } catch (Exception ex) {
             System.out.println("tidak bisa diload\n");
         }
@@ -185,78 +226,117 @@ public class EksplorasiWeka {
         EksplorasiWeka w = new EksplorasiWeka();
         Scanner scan = new Scanner(System.in);
         Classifier model = null;
-         
-        System.out.println("Data yang akan digunakan:");
-        System.out.println("1. Weather - Nominal");
-        System.out.println("2. Weather - Kontinu");
-        System.out.println("3. Iris");
-        int pil = scan.nextInt();
-        if(pil == 1){
-            file = "data/weather.nominal.arff";
-            testfile = "data/weather.nominal.test.arff";
-        }
-        else if(pil == 2){
-            file = "data/weather.numeric.arff";
-            testfile = "data/weather.numeric.test.arff";
-        }
-        else{
-            file = "data/iris.arff";
-            testfile = "data/iris.test.arff";
-        }
-         
-        //loadfile
-        w.loadFile(file); 
-        //filter resample
-        w.resample();
-                 
-        //remove attribute
-        System.out.println("menghapus atribut? (Y/N)");
-        String remove = scan.next();
-        if(remove.equalsIgnoreCase("Y")){
-            int idx[] = new int[1];
-            System.out.print("Index atribut yang akan dihapus: ");
-            idx[0] = scan.nextInt();
-            w.removeAttribute(idx);
+        boolean stat = true;
+        while(stat){
+            System.out.println("\n\nProgram Eksplorasi Weka");
+            System.out.println("1. Load data set");
+            System.out.println("2. Filter : Resample");
+            System.out.println("3. Remove Attribute");
+            System.out.println("4. Build Classifier");
+            System.out.println("5. 10 Fold Cross Validation");
+            System.out.println("6. Percentage Split");
+            System.out.println("7. Save model");
+            System.out.println("8. Load model");
+            System.out.println("8. Exit");
+            System.out.print("Pilih Menu : "); 
+            int option = scan.nextInt();
+            if(option == 1) {
+                System.out.println("====LOAD DATA====");
+                System.out.println("Pilih data yang akan digunakan:");
+                System.out.println("1. Weather - Nominal");
+                System.out.println("2. Weather - Kontinu");
+                System.out.println("3. Iris");
+                System.out.print("Nomor data : ");
+                int idData = scan.nextInt();
+                if(idData == 1) {
+                    file = "data/weather.nominal.arff";
+                    testfile = "data/weather.nominal.test.arff";
+                }
+                else if(idData == 2) {
+                    file = "data/weather.numeric.arff";
+                    testfile = "data/weather.numeric.test.arff";
+                }
+                else if(idData == 3){
+                    file = "data/iris.arff";
+                    testfile = "data/iris.test.arff";
+                }
+                w.loadFile(file); 
+            }else if (option == 2){
+                System.out.println("====RESAMPLE====");
+                System.out.println("-B 0 = distribution in input data -- 1 = uniform distribution.");
+                System.out.print("Masukan nilai B : ");
+                int bias = scan.nextInt();
+                System.out.println("-S Specify the random number seed (default 1)");
+                System.out.print("Masukan nilai S : ");
+                int seed = scan.nextInt();
+                System.out.println("-Z The size of the output dataset, as a percentage of\n" +
+                "  the input dataset (default 100)");
+                System.out.println("Masukan nilai Z : ");
+                int Z = scan.nextInt();
+                w.resample(bias, Z, seed);
+            }else if (option == 3){
+                //remove attribute
+                System.out.println("menghapus atribut? (Y/N)");
+                String remove = scan.next();
+                
+                if(remove.equalsIgnoreCase("Y")){
+                    int idx[] = new int[1];
+                    System.out.print("Index atribut yang akan dihapus: ");
+                    idx[0] = scan.nextInt() - 1;
+                    w.removeAttribute(idx);
+                }
+            } else if(option == 4) {
+                System.out.println("====Build Classifier====");
+                //create model
+                System.out.println("Classifier yang akan digunakan:");
+                System.out.println("1. Naive Bayes - Weka");
+                System.out.println("2. DT - Weka");
+                System.out.println("3. C4.5 - Weka");
+                System.out.print("Masukan pilihan : ");
+                int pil = scan.nextInt();
+                
+                if(pil == 1){
+                    model = w.naiveBayesClassifier();
+                }
+                else if(pil == 2){
+                    model = w.id3Classifier();
+                }
+                else if(pil == 3){
+                    model = w.C45();
+                }
+                else if(pil == 4){
+                    //belom di implementasi
+                }else{
+                    System.out.println("Maaf pilihan tidak tersedia");
+                }
+            }else if(option == 5) {
+                //10-fold cross validation
+                w.crossValidation(model);
+            }else if(option == 6) {
+                System.out.print("Masukan nilai percentage split : ");
+                double p = scan.nextDouble();
+                w.percentageSplit(model, p);
+            }else if(option == 7) {
+                System.out.println("Ingin menyimpan model? (Y/N)");
+                String savemodel = scan.next();
+                if(savemodel.equalsIgnoreCase("Y")){
+                    System.out.print("Nama file: ");
+                    String modelname = scan.next();
+                    modelname = "model/" + modelname + ".model";
+                    w.saveModel(modelname, model);  
+                }
+            }else if(option == 8) {
+                System.out.print("Nama file yang akan di Load: ");
+                String loadmodel = scan.next();
+                loadmodel = "model/"+loadmodel;
+                model = w.loadModel(loadmodel);
+            }
+            else {
+                stat = false;
+                System.out.println("====TERIMAKASIH :D====");
+            }
         }
         
-        
-         
-        //create model
-        System.out.println("Classifier yang akan digunakan:");
-        System.out.println("1. Naive Bayes");
-        System.out.println("2. DT");
-        pil = scan.nextInt();
-        if(pil == 1){
-            model = w.naiveBayesClassifier();
-        }
-        else if(pil == 2){
-            model = w.id3Classifier();
-        }
-        else if(pil == 3){
-            //belom di implementasi
-        }
-        else if(pil == 4){
-            //belom di implementasi
-        }else{
-            System.out.println("Maaf pilihan tidak tersedia");
-        }
-        System.out.println(model.toString());
-        //10-fold cross validation
-        w.crossValidation(model);
-        //percentage split
-        w.percentageSplit(model, 66);
-        //saveModel
-        System.out.println("Ingin menyimpan model? (Y/N)");
-        String savemodel = scan.next();
-        if(savemodel.equalsIgnoreCase("Y")){
-            System.out.print("Nama file: ");
-            String modelname = scan.next();
-            modelname += ".model";
-            w.saveModel(modelname, model);   
-            System.out.println("SEMENTARA AUTO LOAD");
-            model = w.loadModel(modelname);
-            //w.crossValidation(model);
-        }
         w.classify(testfile, model);
     }
     
