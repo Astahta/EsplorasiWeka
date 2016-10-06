@@ -111,9 +111,9 @@ public class EksplorasiWeka {
             case 3 :
                 model = new MyID3();
                 break;
-                    /*case 4 :
-                    model = new CustomC45();
-                    break;   */
+            case 4 :
+                model = new myC45();
+                break;
             default:
                 break;
         }

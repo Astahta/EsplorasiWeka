@@ -24,7 +24,6 @@ import weka.core.Utils;
  */
 public class MyID3 extends Classifier 
     implements TechnicalInformationHandler, Sourcable{
-    static final long serialVersionUID = -2693678647096322561L;
 
     private MyID3[] child;
 
